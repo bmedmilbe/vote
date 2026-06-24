@@ -1,0 +1,59 @@
+# ==========================================
+# Django & Python
+# ==========================================
+*.py[cod]
+*$py.class
+__pycache__/
+.pytest_cache/
+.cache/
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+pyenv/
+
+# ==========================================
+# Nginx
+# ==========================================
+# Ignore local nginx configuration backups and logs if stored in project
+nginx/*.log
+nginx/*.conf.bak
+nginx/certs/
+
+# ==========================================
+# Redis
+# ==========================================
+# Ignore Redis database dump files
+*.rdb
+*.aof
+
+# ==========================================
+# Environment Variables & Security (CRITICAL)
+# ==========================================
+.env
+.env.[a-zA-Z]*
+!.env.example
+secrets.json
+*.pem
+*.key
+
+# ==========================================
+# IDEs, Editors & OS Files
+# ==========================================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.DS_Store
+Thumbs.db
+/ignorefolder
