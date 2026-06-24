@@ -1,4 +1,5 @@
 
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.reverse import reverse
@@ -6,6 +7,46 @@ from rest_framework.test import APITestCase
 
 
 class AuthenticationTest(APITestCase):
+    def _create_user(self, data ={
+            'first_name':'First name',
+            'last_name':'Last name',
+            'username': 'username1',
+            'password1': 'password',
+            'password2': 'password',
+            'email':'email@email.com'
+        }):
+        data['password'] = data['password1']
+        self.client.post(reverse('sign-up'),data=data)
+       
+        return get_user_model().objects.last(), data
+    
+    def test_user_can_sign_in(self):
+        #given
+        user, data = self._create_user()
+        #when
+        response = self.client.post(reverse('sign-in'), data={
+            'username':user.username,
+            'password':data['password']
+        })
+        #then
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertIsNotNone(response.data['access'])
+
+    def test_user_cannot_sign_in_with_wrong_password(self):
+        #given
+        user, data = self._create_user()
+        #when
+        response = self.client.post(reverse('sign-in'), data={
+            'username':user.username,
+            'password':'wrong-password'
+        })
+        #then
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn('access', response.data)
+
+    
+
     def test_user_cannot_sign_up_with_password_mismatch(self):
         #given
         data ={
@@ -65,3 +106,5 @@ class AuthenticationTest(APITestCase):
         self.assertEqual(response.data['username'], user.username)
         self.assertEqual(response.data['first_name'], user.first_name)
         self.assertEqual(response.data['last_name'], user.last_name)
+
+    

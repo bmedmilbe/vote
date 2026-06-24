@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -26,3 +27,16 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name',
         )
         read_only_fields = ('id',)
+
+class SignInSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        for field in user._meta.fields:
+            field_name = field.name
+            if field_name not in ['password','id']:
+                token[field_name] = str(getattr(user, field_name))
+        
+        return token
+        
