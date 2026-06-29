@@ -16,6 +16,10 @@ from poll.models import (
 )
 
 
+# ==========================================
+# AUTHENTICATION SERIALIZERS
+# ==========================================
+
 class UserCreateSerializer(serializers.ModelSerializer):
     password1 = serializers.CharField(write_only=True)
     password2 = serializers.CharField(write_only=True)
@@ -41,6 +45,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id',)
 
+
 class SignInSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -48,12 +53,10 @@ class SignInSerializer(TokenObtainPairSerializer):
 
         for field in user._meta.fields:
             field_name = field.name
-            if field_name not in ['password','id']:
+            if field_name not in ['password', 'id']:
                 token[field_name] = str(getattr(user, field_name))
         
         return token
-
-
 
 
 # ==========================================
@@ -61,9 +64,12 @@ class SignInSerializer(TokenObtainPairSerializer):
 # ==========================================
 
 class UserSerializer(serializers.ModelSerializer):
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'date_joined']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'role_display',
+                  'is_active', 'is_staff', 'date_joined']
         read_only_fields = ['id', 'date_joined']
 
 
@@ -133,7 +139,7 @@ class CandidateRegistrationSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
-# TRANSACTION LAYER SERIALIZERS
+# TRANSACTION LAYER SERIALIZERS (REST API)
 # ==========================================
 
 class VoteCountSerializer(serializers.ModelSerializer):
@@ -145,13 +151,12 @@ class VoteCountSerializer(serializers.ModelSerializer):
         model = VoteCount
         fields = ['id', 'polling_result', 'candidate_registration', 'contender_name',
                   'contender_slug', 'total_votes', 'user', 'user_username']
-        read_only_fields = ['polling_result']  # Make polling_result read-only
+        read_only_fields = ['polling_result']
     
     def validate(self, data):
         polling_result = self.instance.polling_result if self.instance else None
         candidate_registration = data.get('candidate_registration')
         
-        # If this is a nested creation, polling_result will be set by the parent
         if polling_result and candidate_registration:
             if (candidate_registration.election_type != polling_result.election_type or
                 candidate_registration.year != polling_result.year):
@@ -197,7 +202,6 @@ class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
         polling_result = PollingStationResult.objects.create(**validated_data)
         
         for vote_data in votes_data:
-            # Set the polling_result for each vote
             VoteCount.objects.create(
                 polling_result=polling_result,
                 **vote_data
@@ -208,30 +212,25 @@ class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         votes_data = validated_data.pop('votes', [])
         
-        # Update PollingStationResult fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        # Update or create VoteCounts
         current_votes = {vote.candidate_registration_id: vote for vote in instance.votes.all()}
         
         for vote_data in votes_data:
             candidate_registration = vote_data.get('candidate_registration')
             if candidate_registration.id in current_votes:
-                # Update existing
                 vote = current_votes.pop(candidate_registration.id)
                 vote.total_votes = vote_data.get('total_votes', vote.total_votes)
                 vote.user = vote_data.get('user', vote.user)
                 vote.save()
             else:
-                # Create new
                 VoteCount.objects.create(
                     polling_result=instance,
                     **vote_data
                 )
         
-        # Delete votes that were removed
         for vote in current_votes.values():
             vote.delete()
         
@@ -239,7 +238,7 @@ class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
-# ACCUMULATED LAYER SERIALIZERS
+# ACCUMULATED LAYER SERIALIZERS (REST API)
 # ==========================================
 
 class AccumulatedResultSerializer(serializers.ModelSerializer):
@@ -276,6 +275,62 @@ class AccumulatedResultSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
+# WEBSOCKET SERIALIZERS (For Real-time Updates)
+# ==========================================
+
+class WebSocketVoteCountSerializer(serializers.ModelSerializer):
+    """Simplified VoteCount serializer for WebSocket updates"""
+    contender_name = serializers.CharField(source='candidate_registration.contender.name', read_only=True)
+    contender_slug = serializers.CharField(source='candidate_registration.contender.slug', read_only=True)
+    
+    class Meta:
+        model = VoteCount
+        fields = ['id', 'candidate_registration', 'contender_name', 
+                  'contender_slug', 'total_votes']
+
+
+class WebSocketPollingStationResultSerializer(serializers.ModelSerializer):
+    """Simplified PollingStationResult serializer for WebSocket updates"""
+    votes = WebSocketVoteCountSerializer(many=True, read_only=True)
+    total_votes = serializers.SerializerMethodField()
+    station_name = serializers.CharField(source='polling_station.name', read_only=True)
+    constituency_code = serializers.CharField(source='polling_station.constituency.code', read_only=True)
+    
+    class Meta:
+        model = PollingStationResult
+        fields = ['id', 'polling_station', 'station_name', 'constituency_code',
+                  'election_type', 'year', 'abstentions', 'blank_votes', 
+                  'null_votes', 'votes', 'total_votes']
+    
+    def get_total_votes(self, obj):
+        return sum(vote.total_votes for vote in obj.votes.all())
+
+
+class WebSocketAccumulatedResultSerializer(serializers.ModelSerializer):
+    """Simplified AccumulatedResult serializer for WebSocket updates"""
+    contender_name = serializers.CharField(source='candidate_registration.contender.name', read_only=True)
+    contender_slug = serializers.CharField(source='candidate_registration.contender.slug', read_only=True)
+    location_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AccumulatedResult
+        fields = ['id', 'scope', 'location_name', 'candidate_registration', 
+                  'contender_name', 'contender_slug', 'election_type', 
+                  'year', 'total_votes', 'estimated_seats']
+    
+    def get_location_name(self, obj):
+        if obj.scope == 'National':
+            return 'National'
+        elif obj.scope == 'District' and obj.district:
+            return obj.district.name
+        elif obj.scope == 'Circle' and obj.circle:
+            return f"{obj.circle.name} ({obj.circle.district.name})"
+        elif obj.scope == 'Constituency' and obj.constituency:
+            return f"{obj.constituency.code} - {obj.constituency.name}"
+        return None
+
+
+# ==========================================
 # SUMMARY AND STATISTICS SERIALIZERS
 # ==========================================
 
@@ -298,4 +353,27 @@ class CandidateRankingSerializer(serializers.Serializer):
     total_votes = serializers.IntegerField()
     percentage = serializers.FloatField()
     estimated_seats = serializers.IntegerField(required=False)
-        
+
+
+# ==========================================
+# DASHBOARD SERIALIZERS
+# ==========================================
+
+class DashboardSummarySerializer(serializers.Serializer):
+    """Serializer for dashboard summary data"""
+    total_polling_stations = serializers.IntegerField()
+    total_abstentions = serializers.IntegerField()
+    total_blank_votes = serializers.IntegerField()
+    total_null_votes = serializers.IntegerField()
+    total_valid_votes = serializers.IntegerField()
+    total_votes = serializers.IntegerField()
+    turnout_percentage = serializers.FloatField()
+
+
+class DashboardDataSerializer(serializers.Serializer):
+    """Serializer for complete dashboard data"""
+    national_results = AccumulatedResultSerializer(many=True)
+    district_summary = serializers.ListField()
+    recent_results = PollingStationResultSerializer(many=True)
+    statistics = DashboardSummarySerializer()
+    election_meta = serializers.DictField()

@@ -1,0 +1,59 @@
+INFO 2026-06-29 19:39:26,804 consumers 66396 139059854635456 User testuser disconnected from election updates
+INFO 2026-06-29 19:39:27,430 consumers 66396 139059854635456 User testuser disconnected from election updates
+INFO 2026-06-29 19:39:27,891 consumers 66396 139059854635456 User testuser disconnected from election updates
+INFO 2026-06-29 19:39:28,368 consumers 66396 139059854635456 User citizen disconnected from election updates
+INFO 2026-06-29 19:39:28,770 consumers 66396 139059854635456 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:39:29,201 consumers 66396 139059854635456 Staff admin disconnected from staff updates
+ERROR 2026-06-29 19:39:30,059 consumers 66396 139059854635456 Error creating polling result: You cannot call this from an async context - use a thread or sync_to_async.
+INFO 2026-06-29 19:39:30,652 consumers 66396 139059854635456 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:39:31,068 consumers 66396 139059854635456 Staff staff disconnected from staff updates
+ERROR 2026-06-29 19:39:32,214 consumers 66396 139059854635456 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+INFO 2026-06-29 19:39:32,215 consumers 66396 139059854635456 User testuser disconnected from election updates
+INFO 2026-06-29 19:39:32,632 consumers 66396 139059854635456 User testuser disconnected from election updates
+INFO 2026-06-29 19:39:33,030 consumers 66396 139059854635456 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:07,799 consumers 66542 132193416266176 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:08,496 consumers 66542 132193416266176 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:08,922 consumers 66542 132193416266176 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:09,369 consumers 66542 132193416266176 User citizen disconnected from election updates
+INFO 2026-06-29 19:42:09,747 consumers 66542 132193416266176 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:10,154 consumers 66542 132193416266176 Staff admin disconnected from staff updates
+ERROR 2026-06-29 19:42:11,005 consumers 66542 132193416266176 Error creating polling result: You cannot call this from an async context - use a thread or sync_to_async.
+INFO 2026-06-29 19:42:11,583 consumers 66542 132193416266176 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:11,991 consumers 66542 132193416266176 Staff staff disconnected from staff updates
+ERROR 2026-06-29 19:42:13,137 consumers 66542 132193416266176 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+INFO 2026-06-29 19:42:13,138 consumers 66542 132193416266176 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:13,510 consumers 66542 132193416266176 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:13,904 consumers 66542 132193416266176 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:35,460 consumers 66604 140477790708160 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:36,050 consumers 66604 140477790708160 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:36,521 consumers 66604 140477790708160 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:36,978 consumers 66604 140477790708160 User citizen disconnected from election updates
+INFO 2026-06-29 19:42:37,378 consumers 66604 140477790708160 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:37,764 consumers 66604 140477790708160 Staff admin disconnected from staff updates
+ERROR 2026-06-29 19:42:38,619 consumers 66604 140477790708160 Error creating polling result: You cannot call this from an async context - use a thread or sync_to_async.
+INFO 2026-06-29 19:42:39,177 consumers 66604 140477790708160 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:39,584 consumers 66604 140477790708160 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:40,413 consumers 66604 140477790708160 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:42:40,413 consumers 66604 140477790708160 User citizen disconnected from election updates
+ERROR 2026-06-29 19:42:40,840 consumers 66604 140477790708160 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+INFO 2026-06-29 19:42:40,840 consumers 66604 140477790708160 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:41,262 consumers 66604 140477790708160 User testuser disconnected from election updates
+INFO 2026-06-29 19:42:41,674 consumers 66604 140477790708160 Staff staff disconnected from staff updates
+INFO 2026-06-29 19:53:06,685 consumers 66887 135986735620544 User testuser disconnected from election updates
+INFO 2026-06-29 19:53:07,309 consumers 66887 135986735620544 User testuser disconnected from election updates
+INFO 2026-06-29 19:53:07,715 consumers 66887 135986735620544 User testuser disconnected from election updates
+INFO 2026-06-29 19:53:08,163 consumers 66887 135986735620544 User citizen disconnected from election updates
+INFO 2026-06-29 19:53:11,540 consumers 66887 135986735620544 User citizen disconnected from election updates
+ERROR 2026-06-29 19:53:11,936 consumers 66887 135986735620544 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+INFO 2026-06-29 19:53:11,937 consumers 66887 135986735620544 User testuser disconnected from election updates
+INFO 2026-06-29 19:53:12,367 consumers 66887 135986735620544 User testuser disconnected from election updates
+ERROR 2026-06-29 19:55:36,357 consumers 67024 137301049524672 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 19:57:59,635 consumers 67103 137722254983616 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 19:59:49,645 consumers 67177 129481601012160 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:00:43,054 consumers 67245 128024927064512 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:01:04,498 consumers 67327 136220021236160 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:03:21,030 consumers 67412 138258004468160 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:05:55,015 consumers 67646 139062485279168 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:09:35,747 consumers 67906 133042318221760 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:10:38,977 consumers 68092 131235041907136 Invalid JSON received: Expecting value: line 1 column 1 (char 0)
+ERROR 2026-06-29 20:36:49,617 consumers 69976 132725410488768 Invalid JSON received: Expecting value: line 1 column 1 (char 0)

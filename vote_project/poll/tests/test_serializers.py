@@ -25,6 +25,16 @@ from poll.serializers import (
     PollingStationSerializer,
     UserSerializer,
     VoteCountSerializer,
+    # WebSocket serializers
+    WebSocketVoteCountSerializer,
+    WebSocketPollingStationResultSerializer,
+    WebSocketAccumulatedResultSerializer,
+    # Dashboard serializers
+    DashboardSummarySerializer,
+    DashboardDataSerializer,
+    # Authentication serializers
+    UserCreateSerializer,
+    SignInSerializer,
 )
 
 User = get_user_model()
@@ -39,7 +49,27 @@ def user():
     return User.objects.create_user(
         username="testuser",
         password="testpass123",
-        email="test@example.com"
+        email="test@example.com",
+        role="citizen"
+    )
+
+@pytest.fixture
+def admin_user():
+    return User.objects.create_user(
+        username="admin",
+        password="adminpass123",
+        email="admin@example.com",
+        role="admin",
+        is_staff=True
+    )
+
+@pytest.fixture
+def electoral_staff_user():
+    return User.objects.create_user(
+        username="staff",
+        password="staffpass123",
+        email="staff@example.com",
+        role="electoral_staff"
     )
 
 @pytest.fixture
@@ -107,6 +137,53 @@ def vote_count(polling_station_result, candidate_registration, user):
 
 
 # ==========================================
+# AUTHENTICATION SERIALIZER TESTS
+# ==========================================
+
+@pytest.mark.django_db
+class TestAuthenticationSerializers:
+    
+    def test_user_create_serializer(self):
+        data = {
+            'username': 'newuser',
+            'password1': 'testpass123',
+            'password2': 'testpass123',
+            'first_name': 'John',
+            'last_name': 'Doe'
+        }
+        
+        serializer = UserCreateSerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+        user = serializer.save()
+        
+        assert user.username == 'newuser'
+        assert user.first_name == 'John'
+        assert user.last_name == 'Doe'
+        assert user.check_password('testpass123')
+    
+    def test_user_create_serializer_password_mismatch(self):
+        data = {
+            'username': 'newuser',
+            'password1': 'testpass123',
+            'password2': 'differentpass',
+            'first_name': 'John',
+            'last_name': 'Doe'
+        }
+        
+        serializer = UserCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'Passwords must match' in str(serializer.errors)
+    
+    def test_sign_in_serializer(self, user):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        
+        # Test token generation
+        refresh = RefreshToken.for_user(user)
+        assert refresh is not None
+        assert str(refresh.access_token) is not None
+
+
+# ==========================================
 # USER SERIALIZER TESTS
 # ==========================================
 
@@ -122,9 +199,12 @@ class TestUserSerializer:
         assert 'email' in data
         assert 'first_name' in data
         assert 'last_name' in data
+        assert 'role' in data
+        assert 'role_display' in data
         assert 'is_active' in data
+        assert 'is_staff' in data
         assert 'date_joined' in data
-        assert 'password' not in data  # Should not be exposed
+        assert 'password' not in data
     
     def test_user_serializer_read_only_fields(self):
         data = {
@@ -132,12 +212,11 @@ class TestUserSerializer:
             'username': 'newuser',
             'email': 'new@example.com',
             'first_name': 'John',
-            'last_name': 'Doe'
+            'last_name': 'Doe',
+            'role': 'admin'
         }
         serializer = UserSerializer(data=data)
         assert serializer.is_valid()
-        
-        # id should be ignored (read-only)
         assert 'id' not in serializer.validated_data
 
 
@@ -160,7 +239,6 @@ class TestGeographicSerializers:
     def test_district_serializer_with_circles(self, district, electoral_circle):
         serializer = DistrictSerializer(district)
         data = serializer.data
-        
         assert data['circles_count'] == 1
     
     def test_electoral_circle_serializer(self, electoral_circle):
@@ -252,7 +330,6 @@ class TestTransactionSerializers:
     def test_polling_station_result_serializer_total_votes(self, polling_station_result, vote_count):
         serializer = PollingStationResultSerializer(polling_station_result)
         data = serializer.data
-        
         assert data['total_votes'] == 100
         assert data['valid_votes'] == 100
     
@@ -270,8 +347,6 @@ class TestTransactionSerializers:
         assert data['user_username'] == vote_count.user.username
     
     def test_vote_count_serializer_validation(self, polling_station_result, contender):
-        """Test that VoteCountSerializer validates election type match."""
-        # Create a candidate registration with different election type
         different_registration = CandidateRegistration.objects.create(
             contender=contender,
             election_type="Presidential",
@@ -279,16 +354,6 @@ class TestTransactionSerializers:
             representative_name="Jane Doe"
         )
         
-        # Create data for the serializer
-        data = {
-            'candidate_registration': different_registration.id,
-            'total_votes': 100
-        }
-        
-        # We need to test validation at the model level or by creating a vote count
-        # Since polling_result is read-only, the serializer won't validate it
-        
-        # Option 1: Test the model's clean method directly
         vote_count = VoteCount(
             polling_result=polling_station_result,
             candidate_registration=different_registration,
@@ -299,8 +364,140 @@ class TestTransactionSerializers:
             vote_count.full_clean()
         
         assert "not registered for this specific election type and year" in str(excinfo.value)
+
+
+# ==========================================
+# POLLING STATION RESULT WITH VOTES TESTS
+# ==========================================
+
+@pytest.mark.django_db
+class TestPollingStationResultWithVotesSerializer:
+    
+    def test_serializer_fields(self, polling_station_result):
+        serializer = PollingStationResultWithVotesSerializer(polling_station_result)
+        data = serializer.data
         
+        assert data['id'] == polling_station_result.id
+        assert data['polling_station'] == polling_station_result.polling_station.id
+        assert data['election_type'] == polling_station_result.election_type
+        assert data['year'] == polling_station_result.year
+        assert data['abstentions'] == polling_station_result.abstentions
+        assert data['blank_votes'] == polling_station_result.blank_votes
+        assert data['null_votes'] == polling_station_result.null_votes
+        assert 'votes' in data
+        assert isinstance(data['votes'], list)
+    
+    def test_create_with_votes(self, polling_station, contender):
+        registration = CandidateRegistration.objects.create(
+            contender=contender,
+            election_type="Legislative",
+            year=2026,
+            representative_name="John Doe"
+        )
         
+        data = {
+            'polling_station': polling_station.id,
+            'election_type': 'Legislative',
+            'year': 2026,
+            'abstentions': 10,
+            'blank_votes': 5,
+            'null_votes': 3,
+            'votes': [
+                {
+                    'candidate_registration': registration.id,
+                    'total_votes': 100,
+                    'user': None
+                }
+            ]
+        }
+        
+        serializer = PollingStationResultWithVotesSerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+        result = serializer.save()
+        
+        assert result.id is not None
+        assert result.votes.count() == 1
+        assert result.votes.first().total_votes == 100
+    
+    def test_update_with_votes(self, polling_station_result, candidate_registration):
+        VoteCount.objects.create(
+            polling_result=polling_station_result,
+            candidate_registration=candidate_registration,
+            total_votes=100
+        )
+        
+        data = {
+            'polling_station': polling_station_result.polling_station.id,
+            'election_type': 'Legislative',
+            'year': 2026,
+            'abstentions': 20,
+            'blank_votes': 10,
+            'null_votes': 5,
+            'votes': [
+                {
+                    'candidate_registration': candidate_registration.id,
+                    'total_votes': 150,
+                    'user': None
+                }
+            ]
+        }
+        
+        serializer = PollingStationResultWithVotesSerializer(
+            polling_station_result, 
+            data=data,
+            partial=True
+        )
+        assert serializer.is_valid(), serializer.errors
+        result = serializer.save()
+        
+        assert result.abstentions == 20
+        assert result.votes.count() == 1
+        assert result.votes.first().total_votes == 150
+    
+    def test_create_with_multiple_votes(self, polling_station, contender):
+        registration1 = CandidateRegistration.objects.create(
+            contender=contender,
+            election_type="Legislative",
+            year=2026,
+            representative_name="Candidate A"
+        )
+        
+        contender2 = Contender.objects.create(name="Party B", slug="PB")
+        registration2 = CandidateRegistration.objects.create(
+            contender=contender2,
+            election_type="Legislative",
+            year=2026,
+            representative_name="Candidate B"
+        )
+        
+        data = {
+            'polling_station': polling_station.id,
+            'election_type': 'Legislative',
+            'year': 2026,
+            'abstentions': 10,
+            'blank_votes': 5,
+            'null_votes': 3,
+            'votes': [
+                {
+                    'candidate_registration': registration1.id,
+                    'total_votes': 150,
+                    'user': None
+                },
+                {
+                    'candidate_registration': registration2.id,
+                    'total_votes': 100,
+                    'user': None
+                }
+            ]
+        }
+        
+        serializer = PollingStationResultWithVotesSerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+        result = serializer.save()
+        
+        assert result.votes.count() == 2
+        total = sum(vote.total_votes for vote in result.votes.all())
+        assert total == 250
 
 
 # ==========================================
@@ -355,7 +552,6 @@ class TestAccumulatedResultSerializer:
         assert data['constituency'] is None
     
     def test_serializer_validation_national(self, candidate_registration):
-        """Test that National scope validation works."""
         data = {
             'scope': 'National',
             'candidate_registration': candidate_registration.id,
@@ -371,7 +567,6 @@ class TestAccumulatedResultSerializer:
         assert serializer.is_valid()
     
     def test_serializer_validation_national_with_district(self, candidate_registration, district):
-        """Test that National scope with district raises validation error."""
         data = {
             'scope': 'National',
             'candidate_registration': candidate_registration.id,
@@ -388,7 +583,6 @@ class TestAccumulatedResultSerializer:
         assert 'non_field_errors' in serializer.errors
     
     def test_serializer_validation_district(self, candidate_registration, district):
-        """Test that District scope validation works."""
         data = {
             'scope': 'District',
             'district': district.id,
@@ -404,7 +598,6 @@ class TestAccumulatedResultSerializer:
         assert serializer.is_valid()
     
     def test_serializer_validation_district_without_district(self, candidate_registration):
-        """Test that District scope without district raises validation error."""
         data = {
             'scope': 'District',
             'candidate_registration': candidate_registration.id,
@@ -422,142 +615,177 @@ class TestAccumulatedResultSerializer:
 
 
 # ==========================================
-# POLLING STATION RESULT WITH VOTES TESTS
+# WEBSOCKET SERIALIZER TESTS
 # ==========================================
 
 @pytest.mark.django_db
-class TestPollingStationResultWithVotesSerializer:
+class TestWebSocketSerializers:
     
-    def test_serializer_fields(self, polling_station_result):
-        serializer = PollingStationResultWithVotesSerializer(polling_station_result)
+    def test_websocket_vote_count_serializer(self, vote_count):
+        serializer = WebSocketVoteCountSerializer(vote_count)
+        data = serializer.data
+        
+        assert data['id'] == vote_count.id
+        assert data['candidate_registration'] == vote_count.candidate_registration.id
+        assert data['contender_name'] == vote_count.candidate_registration.contender.name
+        assert data['contender_slug'] == vote_count.candidate_registration.contender.slug
+        assert data['total_votes'] == vote_count.total_votes
+        assert 'polling_result' not in data  # Should not include polling_result
+    
+    def test_websocket_polling_station_result_serializer(self, polling_station_result, vote_count):
+        serializer = WebSocketPollingStationResultSerializer(polling_station_result)
         data = serializer.data
         
         assert data['id'] == polling_station_result.id
         assert data['polling_station'] == polling_station_result.polling_station.id
+        assert data['station_name'] == polling_station_result.polling_station.name
+        assert data['constituency_code'] == polling_station_result.polling_station.constituency.code
         assert data['election_type'] == polling_station_result.election_type
         assert data['year'] == polling_station_result.year
         assert data['abstentions'] == polling_station_result.abstentions
         assert data['blank_votes'] == polling_station_result.blank_votes
         assert data['null_votes'] == polling_station_result.null_votes
         assert 'votes' in data
-        assert isinstance(data['votes'], list)
+        assert 'total_votes' in data
+        assert data['total_votes'] == 100
     
-    def test_create_with_votes(self, polling_station, contender):
-        """Test creating a PollingStationResult with nested VoteCounts."""
-        registration = CandidateRegistration.objects.create(
-            contender=contender,
+    def test_websocket_accumulated_result_serializer_national(self, candidate_registration):
+        result = AccumulatedResult.objects.create(
+            scope="National",
+            candidate_registration=candidate_registration,
             election_type="Legislative",
             year=2026,
-            representative_name="John Doe"
+            total_votes=1000,
+            estimated_seats=10
         )
         
-        data = {
-            'polling_station': polling_station.id,
-            'election_type': 'Legislative',
-            'year': 2026,
-            'abstentions': 10,
-            'blank_votes': 5,
-            'null_votes': 3,
-            'votes': [
-                {
-                    'candidate_registration': registration.id,
-                    'total_votes': 100,
-                    'user': None
-                }
-            ]
-        }
+        serializer = WebSocketAccumulatedResultSerializer(result)
+        data = serializer.data
         
-        serializer = PollingStationResultWithVotesSerializer(data=data)
-        assert serializer.is_valid(), serializer.errors
-        result = serializer.save()
-        
-        assert result.id is not None
-        assert result.votes.count() == 1
-        assert result.votes.first().total_votes == 100
+        assert data['id'] == result.id
+        assert data['scope'] == result.scope
+        assert data['location_name'] == 'National'
+        assert data['contender_name'] == candidate_registration.contender.name
+        assert data['contender_slug'] == candidate_registration.contender.slug
+        assert data['election_type'] == result.election_type
+        assert data['year'] == result.year
+        assert data['total_votes'] == result.total_votes
+        assert data['estimated_seats'] == result.estimated_seats
+        assert 'district' not in data  # Not included in WebSocket serializer
+        assert 'circle' not in data
+        assert 'constituency' not in data
     
-    def test_update_with_votes(self, polling_station_result, candidate_registration):
-        """Test updating a PollingStationResult with nested VoteCounts."""
-        # Create initial vote
-        VoteCount.objects.create(
-            polling_result=polling_station_result,
+    def test_websocket_accumulated_result_serializer_district(self, candidate_registration, district):
+        result = AccumulatedResult.objects.create(
+            scope="District",
+            district=district,
             candidate_registration=candidate_registration,
+            election_type="Legislative",
+            year=2026,
+            total_votes=500
+        )
+        
+        serializer = WebSocketAccumulatedResultSerializer(result)
+        data = serializer.data
+        
+        assert data['scope'] == 'District'
+        assert data['location_name'] == district.name
+    
+    def test_websocket_accumulated_result_serializer_circle(self, candidate_registration, electoral_circle):
+        result = AccumulatedResult.objects.create(
+            scope="Circle",
+            circle=electoral_circle,
+            candidate_registration=candidate_registration,
+            election_type="Legislative",
+            year=2026,
+            total_votes=200
+        )
+        
+        serializer = WebSocketAccumulatedResultSerializer(result)
+        data = serializer.data
+        
+        assert data['scope'] == 'Circle'
+        assert data['location_name'] == f"{electoral_circle.name} ({electoral_circle.district.name})"
+    
+    def test_websocket_accumulated_result_serializer_constituency(self, candidate_registration, constituency):
+        result = AccumulatedResult.objects.create(
+            scope="Constituency",
+            constituency=constituency,
+            candidate_registration=candidate_registration,
+            election_type="Legislative",
+            year=2026,
             total_votes=100
         )
         
-        # Update data
-        data = {
-            'polling_station': polling_station_result.polling_station.id,
-            'election_type': 'Legislative',
-            'year': 2026,
-            'abstentions': 20,
-            'blank_votes': 10,
-            'null_votes': 5,
-            'votes': [
-                {
-                    'candidate_registration': candidate_registration.id,
-                    'total_votes': 150,
-                    'user': None
-                }
-            ]
-        }
+        serializer = WebSocketAccumulatedResultSerializer(result)
+        data = serializer.data
         
-        serializer = PollingStationResultWithVotesSerializer(
-            polling_station_result, 
-            data=data,
-            partial=True  # Allow partial updates
-        )
-        assert serializer.is_valid(), serializer.errors
-        result = serializer.save()
-        
-        assert result.abstentions == 20
-        assert result.votes.count() == 1
-        assert result.votes.first().total_votes == 150
+        assert data['scope'] == 'Constituency'
+        assert data['location_name'] == f"{constituency.code} - {constituency.name}"
+
+
+# ==========================================
+# DASHBOARD SERIALIZER TESTS
+# ==========================================
+
+@pytest.mark.django_db
+class TestDashboardSerializers:
     
-    def test_create_with_multiple_votes(self, polling_station, contender):
-        """Test creating a PollingStationResult with multiple VoteCounts."""
-        registration1 = CandidateRegistration.objects.create(
-            contender=contender,
-            election_type="Legislative",
-            year=2026,
-            representative_name="Candidate A"
-        )
+    def test_dashboard_summary_serializer(self):
+        data = {
+            'total_polling_stations': 50,
+            'total_abstentions': 500,
+            'total_blank_votes': 100,
+            'total_null_votes': 50,
+            'total_valid_votes': 2000,
+            'total_votes': 2650,
+            'turnout_percentage': 80.0
+        }
         
-        contender2 = Contender.objects.create(name="Party B", slug="PB")
-        registration2 = CandidateRegistration.objects.create(
-            contender=contender2,
+        serializer = DashboardSummarySerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+        
+        serialized = serializer.data
+        assert serialized['total_polling_stations'] == 50
+        assert serialized['total_abstentions'] == 500
+        assert serialized['turnout_percentage'] == 80.0
+    
+    def test_dashboard_data_serializer(self, candidate_registration, district):
+        from poll.serializers import DashboardDataSerializer
+        
+        # Create some test data
+        AccumulatedResult.objects.create(
+            scope="National",
+            candidate_registration=candidate_registration,
             election_type="Legislative",
             year=2026,
-            representative_name="Candidate B"
+            total_votes=1000
         )
         
         data = {
-            'polling_station': polling_station.id,
-            'election_type': 'Legislative',
-            'year': 2026,
-            'abstentions': 10,
-            'blank_votes': 5,
-            'null_votes': 3,
-            'votes': [
-                {
-                    'candidate_registration': registration1.id,
-                    'total_votes': 150,
-                    'user': None
-                },
-                {
-                    'candidate_registration': registration2.id,
-                    'total_votes': 100,
-                    'user': None
-                }
-            ]
+            'national_results': [],
+            'district_summary': [
+                {'district__name': 'Água Grande', 'total_votes': 500, 'total_seats': 5}
+            ],
+            'recent_results': [],
+            'statistics': {
+                'total_polling_stations': 10,
+                'total_abstentions': 100,
+                'total_blank_votes': 50,
+                'total_null_votes': 30,
+                'total_valid_votes': 820,
+                'total_votes': 900,
+                'turnout_percentage': 90.0
+            },
+            'election_meta': {
+                'election_type': 'Legislative',
+                'year': 2026,
+                'last_updated': '2026-01-01T00:00:00'
+            }
         }
         
-        serializer = PollingStationResultWithVotesSerializer(data=data)
+        serializer = DashboardDataSerializer(data=data)
         assert serializer.is_valid(), serializer.errors
-        result = serializer.save()
-        
-        assert result.votes.count() == 2
-        total = sum(vote.total_votes for vote in result.votes.all())
-        assert total == 250
 
 
 # ==========================================
@@ -586,7 +814,6 @@ class TestSummarySerializers:
         serializer = ElectionSummarySerializer(data=data)
         assert serializer.is_valid(), serializer.errors
         
-        # Test serialization
         serialized = ElectionSummarySerializer(data).data
         assert serialized['election_type'] == 'Legislative'
         assert serialized['year'] == 2026
@@ -595,23 +822,6 @@ class TestSummarySerializers:
     def test_candidate_ranking_serializer(self, candidate_registration):
         from poll.serializers import CandidateRankingSerializer
         
-        data = {
-            'candidate_registration': candidate_registration,
-            'total_votes': 1000,
-            'percentage': 45.5,
-            'estimated_seats': 25
-        }
-        
-        # Note: This is a serializer for serializing data, not for deserializing
-        # So we need to create the data structure differently
-        ranking_data = {
-            'candidate_registration': candidate_registration,
-            'total_votes': 1000,
-            'percentage': 45.5,
-            'estimated_seats': 25
-        }
-        
-        # For testing the serializer output, we need a properly structured object
         class MockObject:
             pass
         
@@ -639,8 +849,6 @@ class TestSummarySerializers:
 class TestSerializerIntegration:
     
     def test_full_workflow(self, polling_station, user):
-        """Test the full workflow from creating a result with votes."""
-        # Create contender and registration
         contender = Contender.objects.create(name="Party A", slug="PA")
         registration = CandidateRegistration.objects.create(
             contender=contender,
@@ -649,7 +857,6 @@ class TestSerializerIntegration:
             representative_name="Candidate A"
         )
         
-        # Create polling station result with votes using nested serializer
         data = {
             'polling_station': polling_station.id,
             'election_type': 'Legislative',
@@ -670,11 +877,9 @@ class TestSerializerIntegration:
         assert serializer.is_valid(), serializer.errors
         result = serializer.save()
         
-        # Verify everything was created
         assert PollingStationResult.objects.count() == 1
         assert VoteCount.objects.count() == 1
         
-        # Retrieve and verify using serializers
         result_serializer = PollingStationResultSerializer(result)
         result_data = result_serializer.data
         assert result_data['total_votes'] == 100
@@ -686,8 +891,6 @@ class TestSerializerIntegration:
         assert vote_data['user_username'] == user.username
     
     def test_accumulated_result_workflow(self, candidate_registration, district):
-        """Test creating accumulated results for different scopes."""
-        # Create district result
         district_result = AccumulatedResult.objects.create(
             scope="District",
             district=district,
@@ -697,7 +900,6 @@ class TestSerializerIntegration:
             total_votes=500
         )
         
-        # Create national result
         national_result = AccumulatedResult.objects.create(
             scope="National",
             candidate_registration=candidate_registration,
@@ -706,7 +908,6 @@ class TestSerializerIntegration:
             total_votes=1000
         )
         
-        # Serialize both
         district_serializer = AccumulatedResultSerializer(district_result)
         national_serializer = AccumulatedResultSerializer(national_result)
         
@@ -714,3 +915,19 @@ class TestSerializerIntegration:
         assert district_serializer.data['district_name'] == district.name
         assert national_serializer.data['total_votes'] == 1000
         assert national_serializer.data['district'] is None
+    
+    def test_websocket_integration(self, polling_station_result, vote_count):
+        """Test that WebSocket serializers work with real data."""
+        ws_result_serializer = WebSocketPollingStationResultSerializer(polling_station_result)
+        ws_result_data = ws_result_serializer.data
+        
+        assert ws_result_data['total_votes'] == 100
+        assert ws_result_data['station_name'] == polling_station_result.polling_station.name
+        assert len(ws_result_data['votes']) == 1
+        
+        # Test that WebSocket serializers are lighter than REST serializers
+        rest_serializer = PollingStationResultSerializer(polling_station_result)
+        rest_data = rest_serializer.data
+        
+        # WebSocket serializer should have fewer fields
+        assert len(ws_result_data.keys()) < len(rest_data.keys())

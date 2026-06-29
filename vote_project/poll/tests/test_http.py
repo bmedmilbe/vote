@@ -16,18 +16,19 @@ class AuthenticationTest(APITestCase):
             'email':'email@email.com'
         }):
         data['password'] = data['password1']
-        self.client.post(reverse('sign-up'),data=data)
-       
+        response = self.client.post(reverse('poll:sign-up'),data=data)
+        print(response)
         return get_user_model().objects.last(), data
     
     def test_user_can_sign_in(self):
         #given
         user, data = self._create_user()
         #when
-        response = self.client.post(reverse('sign-in'), data={
+        response = self.client.post(reverse('poll:token_obtain_pair'), data={
             'username':user.username,
             'password':data['password']
         })
+        print(response)
         #then
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
@@ -37,7 +38,7 @@ class AuthenticationTest(APITestCase):
         #given
         user, data = self._create_user()
         #when
-        response = self.client.post(reverse('sign-in'), data={
+        response = self.client.post(reverse('poll:token_obtain_pair'), data={
             'username':user.username,
             'password':'wrong-password'
         })
@@ -59,7 +60,7 @@ class AuthenticationTest(APITestCase):
         }
         
         #when
-        response = self.client.post(reverse('sign-up'),data=data)
+        response = self.client.post(reverse('poll:sign-up'),data=data)
         #then
         user = get_user_model().objects.last()
         self.assertEqual(user, None)
@@ -79,8 +80,8 @@ class AuthenticationTest(APITestCase):
         data2['email'] = 'email@email.com'
         data2['username'] = 'username2'
     
-        self.client.post(reverse('sign-up'),data=data)
-        response_client_2 = self.client.post(reverse('sign-up'),data=data2)
+        self.client.post(reverse('poll:sign-up'),data=data)
+        response_client_2 = self.client.post(reverse('poll:sign-up'),data=data2)
 
         #then
         self.assertEqual(get_user_model().objects.count(), 1)
@@ -92,13 +93,13 @@ class AuthenticationTest(APITestCase):
             'first_name':'First name',
             'last_name':'Last name',
             'username': 'username1',
-            'password1': 'password-test',
-            'password2': 'password-test',
+            'password1': 'password',
+            'password2': 'password',
             'email':'email@email.com'
         }
         
         #when
-        response = self.client.post(reverse('sign-up'),data=data)
+        response = self.client.post(reverse('poll:sign-up'),data=data)
         #then
         user = get_user_model().objects.last()
         self.assertEqual(status.HTTP_201_CREATED, response.status_code)

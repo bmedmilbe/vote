@@ -2,10 +2,17 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
-# Create your models here.
-
 class User(AbstractUser):
-    pass
+    ROLE_CHOICES = [
+        ('citizen', 'Citizen'),
+        ('electoral_staff', 'Electoral Staff'),
+        ('admin', 'Administrator'),
+    ]
+    
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='citizen')
+    
+    def __str__(self):
+        return f"{self.username} ({self.get_role_display()})"
 
 
 # ==========================================
@@ -92,7 +99,10 @@ class PollingStationResult(models.Model):
     abstentions = models.PositiveIntegerField(default=0)
     blank_votes = models.PositiveIntegerField(default=0)
     null_votes = models.PositiveIntegerField(default=0)
-
+    verified = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_results')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
     class Meta:
         unique_together = ('polling_station', 'election_type', 'year')
 
