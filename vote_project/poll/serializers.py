@@ -1,6 +1,4 @@
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import (
     AccumulatedResult,
@@ -14,47 +12,6 @@ from .models import (
     User,
     VoteCount,
 )
-
-
-class UserCreateSerializer(serializers.ModelSerializer):
-    password1 = serializers.CharField(write_only=True)
-    password2 = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        if data['password1'] != data['password2']:
-            raise serializers.ValidationError('Passwords must match.')
-        return data
-
-    def create(self, validated_data):
-        data = {
-            key: value for key, value in validated_data.items()
-            if key not in ('password1', 'password2')
-        }
-        data['password'] = validated_data['password1']
-        return self.Meta.model.objects.create_user(**data)
-
-    class Meta:
-        model = get_user_model()
-        fields = (
-            'id', 'username', 'password1', 'password2',
-            'first_name', 'last_name',
-        )
-        read_only_fields = ('id',)
-
-class SignInSerializer(TokenObtainPairSerializer):
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-
-        for field in user._meta.fields:
-            field_name = field.name
-            if field_name not in ['password','id']:
-                token[field_name] = str(getattr(user, field_name))
-        
-        return token
-    
-
-
 
 # ==========================================
 # USER SERIALIZER
@@ -136,6 +93,31 @@ class CandidateRegistrationSerializer(serializers.ModelSerializer):
 # TRANSACTION LAYER SERIALIZERS
 # ==========================================
 
+class VoteCountSerializer(serializers.ModelSerializer):
+    contender_name = serializers.CharField(source='candidate_registration.contender.name', read_only=True)
+    contender_slug = serializers.CharField(source='candidate_registration.contender.slug', read_only=True)
+    user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = VoteCount
+        fields = ['id', 'polling_result', 'candidate_registration', 'contender_name',
+                  'contender_slug', 'total_votes', 'user', 'user_username']
+        read_only_fields = ['polling_result']  # Make polling_result read-only
+    
+    def validate(self, data):
+        polling_result = self.instance.polling_result if self.instance else None
+        candidate_registration = data.get('candidate_registration')
+        
+        # If this is a nested creation, polling_result will be set by the parent
+        if polling_result and candidate_registration:
+            if (candidate_registration.election_type != polling_result.election_type or
+                candidate_registration.year != polling_result.year):
+                raise serializers.ValidationError(
+                    "This candidate/party is not registered for this specific election type and year."
+                )
+        return data
+
+
 class PollingStationResultSerializer(serializers.ModelSerializer):
     polling_station_full_name = serializers.CharField(source='polling_station.__str__', read_only=True)
     constituency_code = serializers.CharField(source='polling_station.constituency.code', read_only=True)
@@ -156,42 +138,10 @@ class PollingStationResultSerializer(serializers.ModelSerializer):
         return self.get_total_votes(obj)
     
     def get_total_registered(self, obj):
-        # This would need a field for registered voters if available
-        # Placeholder - you may want to add a registered_voters field
         return None
 
 
-class VoteCountSerializer(serializers.ModelSerializer):
-    contender_name = serializers.CharField(source='candidate_registration.contender.name', read_only=True)
-    contender_slug = serializers.CharField(source='candidate_registration.contender.slug', read_only=True)
-    user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
-    
-    class Meta:
-        model = VoteCount
-        fields = ['id', 'polling_result', 'candidate_registration', 'contender_name',
-                  'contender_slug', 'total_votes', 'user', 'user_username']
-    
-    def validate(self, data):
-        """
-        Check that the candidate registration matches the polling result's
-        election type and year.
-        """
-        polling_result = data.get('polling_result')
-        candidate_registration = data.get('candidate_registration')
-        
-        if polling_result and candidate_registration:
-            if (candidate_registration.election_type != polling_result.election_type or
-                candidate_registration.year != polling_result.year):
-                raise serializers.ValidationError(
-                    "This candidate/party is not registered for this specific election type and year."
-                )
-        return data
-
-
 class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
-    """
-    Nested serializer for creating a PollingStationResult with its VoteCounts.
-    """
     votes = VoteCountSerializer(many=True)
     
     class Meta:
@@ -204,7 +154,11 @@ class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
         polling_result = PollingStationResult.objects.create(**validated_data)
         
         for vote_data in votes_data:
-            VoteCount.objects.create(polling_result=polling_result, **vote_data)
+            # Set the polling_result for each vote
+            VoteCount.objects.create(
+                polling_result=polling_result,
+                **vote_data
+            )
         
         return polling_result
     
@@ -229,7 +183,10 @@ class PollingStationResultWithVotesSerializer(serializers.ModelSerializer):
                 vote.save()
             else:
                 # Create new
-                VoteCount.objects.create(polling_result=instance, **vote_data)
+                VoteCount.objects.create(
+                    polling_result=instance,
+                    **vote_data
+                )
         
         # Delete votes that were removed
         for vote in current_votes.values():
@@ -258,22 +215,19 @@ class AccumulatedResultSerializer(serializers.ModelSerializer):
                   'election_type', 'year', 'total_votes', 'estimated_seats']
     
     def validate(self, data):
-        """
-        Validate that the correct geographic field is provided based on scope.
-        """
         scope = data.get('scope')
         district = data.get('district')
         circle = data.get('circle')
         constituency = data.get('constituency')
         
-        if scope == 'District' and not district:
+        if scope == 'National' and (district or circle or constituency):
+            raise serializers.ValidationError("National scope should not have geographic filters.")
+        elif scope == 'District' and not district:
             raise serializers.ValidationError("District scope requires a district.")
         elif scope == 'Circle' and not circle:
             raise serializers.ValidationError("Circle scope requires a circle.")
         elif scope == 'Constituency' and not constituency:
             raise serializers.ValidationError("Constituency scope requires a constituency.")
-        elif scope == 'National' and (district or circle or constituency):
-            raise serializers.ValidationError("National scope should not have geographic filters.")
         
         return data
 
@@ -283,9 +237,6 @@ class AccumulatedResultSerializer(serializers.ModelSerializer):
 # ==========================================
 
 class ElectionSummarySerializer(serializers.Serializer):
-    """
-    Serializer for election summary statistics.
-    """
     election_type = serializers.CharField()
     year = serializers.IntegerField()
     total_polling_stations = serializers.IntegerField()
@@ -299,12 +250,8 @@ class ElectionSummarySerializer(serializers.Serializer):
 
 
 class CandidateRankingSerializer(serializers.Serializer):
-    """
-    Serializer for ranking candidates by votes.
-    """
     candidate = serializers.CharField(source='candidate_registration.contender.name')
     slug = serializers.CharField(source='candidate_registration.contender.slug')
     total_votes = serializers.IntegerField()
     percentage = serializers.FloatField()
     estimated_seats = serializers.IntegerField(required=False)
-        
