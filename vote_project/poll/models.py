@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
+
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('citizen', 'Citizen'),
@@ -132,7 +133,8 @@ class VoteCount(models.Model):
 # ==========================================
 # ACCUMULATED LAYER (Soma / Acomulados)
 # ==========================================
-
+# poll/models.py - Update AccumulatedResult
+# poll/models.py - Update AccumulatedResult (Keep it simple)
 class AccumulatedResult(models.Model):
     """
     Pre-calculated cache table storing accumulated totals across different scopes.
@@ -156,31 +158,31 @@ class AccumulatedResult(models.Model):
     election_type = models.CharField(max_length=20, choices=CandidateRegistration.ELECTION_TYPES)
     year = models.PositiveIntegerField()
     
-    # Aggregated Values
+    # Aggregated Values - Only candidate votes
     total_votes = models.PositiveIntegerField(default=0)
     estimated_seats = models.PositiveIntegerField(default=0, help_text="Deputados / Vereadores calculated via Hondt method.")
 
     class Meta:
         constraints = [
-            # 1. National level uniqueness
+            # National level uniqueness
             models.UniqueConstraint(
                 fields=['scope', 'candidate_registration', 'election_type', 'year'],
                 condition=models.Q(scope='National'),
                 name='unique_accumulated_national'
             ),
-            # 2. District level uniqueness
+            # District level uniqueness
             models.UniqueConstraint(
                 fields=['scope', 'district', 'candidate_registration', 'election_type', 'year'],
                 condition=models.Q(scope='District'),
                 name='unique_accumulated_district'
             ),
-            # 3. Circle level uniqueness
+            # Circle level uniqueness
             models.UniqueConstraint(
                 fields=['scope', 'circle', 'candidate_registration', 'election_type', 'year'],
                 condition=models.Q(scope='Circle'),
                 name='unique_accumulated_circle'
             ),
-            # 4. Constituency level uniqueness
+            # Constituency level uniqueness
             models.UniqueConstraint(
                 fields=['scope', 'constituency', 'candidate_registration', 'election_type', 'year'],
                 condition=models.Q(scope='Constituency'),

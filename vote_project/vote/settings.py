@@ -40,25 +40,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'corsheaders',
     'poll'
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    # 'poll.middleware.CorsMiddleware',  # HTTP CORS middleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    
-    # JWT Authentication (HTTP only)
-    # 'poll.middleware.JWTAuthMiddleware',
-    
-    # Django Authentication
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    
-    # Role-Based Access (HTTP only)
-    # 'poll.middleware.RoleBasedAccessMiddleware',
-    
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -147,14 +139,33 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 
+# Channel layers for WebSocket
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [REDIS_URL],
+            "hosts": [('127.0.0.1', 6379)],
+            "symmetric_encryption_keys": [SECRET_KEY],
+            "capacity": 1000,
+            "expiry": 60,
+            "group_expiry": 86400,
         },
     },
 }
+
+# CACHES - Removed django_redis to avoid dependency issues
+# If you need caching, install django-redis and uncomment this
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': 'redis://127.0.0.1:6379/1',
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#             'SOCKET_TIMEOUT': 5,
+#             'SOCKET_CONNECT_TIMEOUT': 5,
+#         }
+#     }
+# }
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -178,23 +189,23 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
-# CORS Settings (if using django-cors-headers)
-CORS_ALLOW_ALL_ORIGINS = True  # Only for development
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
 # WebSocket settings
 WEBSOCKET_AUTH_TOKEN_HEADER = 'Authorization'
 
+
+# CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True  # Only for development
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://localhost:8000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:\d+$",
+    r"^http://127\.0\.0\.1:\d+$",
 ]
 CORS_ALLOWED_HEADERS = [
     'accept',
@@ -214,6 +225,12 @@ CORS_ALLOWED_METHODS = [
     'PATCH',
     'POST',
     'PUT',
+]
+
+# Also add CSRF trusted origins for POST requests
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 # ==========================================
@@ -244,7 +261,6 @@ LOGGING = {
         },
         'file': {
             'class': 'logging.FileHandler',
-            # Using absolute path structure via BASE_DIR is cleaner and safer
             'filename': BASE_DIR / 'logs' / 'websocket.log',
             'formatter': 'verbose',
         },

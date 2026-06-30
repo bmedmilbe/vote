@@ -261,7 +261,7 @@ class TestCandidatesAndElections:
         reg2 = CandidateRegistration.objects.create(
             contender=contender,
             election_type="Legislative",
-            year=2030,
+            year=2026,
             representative_name="Jane"
         )
         assert reg1 != reg2
@@ -327,7 +327,7 @@ class TestTransactionLayer:
         result2 = PollingStationResult.objects.create(
             polling_station=polling_station,
             election_type="Legislative",
-            year=2030,
+            year=2026,
             abstentions=20,
             blank_votes=10,
             null_votes=6
@@ -390,7 +390,7 @@ class TestTransactionLayer:
         different_registration = CandidateRegistration.objects.create(
             contender=contender,
             election_type="Legislative",
-            year=2030,  # Different from polling_result
+            year=2026,  # Different from polling_result
             representative_name="Jane Doe"
         )
         
@@ -717,17 +717,17 @@ class TestAccumulatedLayer:
             total_votes=500
         )
         
-        # Create result for 2030 - should work
+        # Create result for 2026 - should work
         result2 = AccumulatedResult.objects.create(
             scope="District",
             district=district,
             candidate_registration=candidate_registration,
             election_type="Legislative",
-            year=2030,
+            year=2026,
             total_votes=400
         )
         
-        assert result2.year == 2030
+        assert result2.year == 2026
         assert AccumulatedResult.objects.filter(
             scope="District",
             district=district,
@@ -839,10 +839,10 @@ class TestAccumulatedLayer:
             scope="National",
             candidate_registration=candidate_registration,
             election_type="Legislative",
-            year=2030,
+            year=2026,
             total_votes=800
         )
-        assert result2.year == 2030
+        assert result2.year == 2026
         
         # Different election type should work
         result3 = AccumulatedResult.objects.create(

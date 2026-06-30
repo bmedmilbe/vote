@@ -2,18 +2,18 @@
 
 import json
 import logging
-from channels.generic.websocket import AsyncWebsocketConsumer
+
 from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Sum
 
 from .models import (
-    PollingStationResult, 
-    VoteCount, 
     AccumulatedResult,
     PollingStation,
-    CandidateRegistration,
+    PollingStationResult,
+    VoteCount,
 )
 from .serializers import (
     PollingStationResultSerializer,
@@ -26,19 +26,11 @@ User = get_user_model()
 
 
 class ElectionConsumer(AsyncWebsocketConsumer):
-    """
-    WebSocket consumer for real-time election updates.
-    Accessible by all authenticated users (citizens, staff, admin).
-    """
-    
     async def connect(self):
-        """Handle WebSocket connection."""
         self.election_room_name = 'election_updates'
         self.room_group_name = f'election_{self.election_room_name}'
         
-        # Get user from scope
         user = self.scope.get('user')
-        
         if user and user.is_authenticated:
             await self.channel_layer.group_add(
                 self.room_group_name,
@@ -46,9 +38,46 @@ class ElectionConsumer(AsyncWebsocketConsumer):
             )
             await self.accept()
             print(f"✅ User {user.username} connected to election updates")
+            
+            # Send initial data on connect - Use Presidential 2026
+            await self.send_initial_data()
         else:
-            print("❌ Unauthenticated connection attempt rejected")
             await self.close()
+    
+    async def send_initial_data(self):
+        """Send initial results when client connects."""
+        try:
+            # Get current national results for Presidential 2026
+            results = await self.get_results('Presidential', 2026, 'National')
+            await self.send(text_data=json.dumps({
+                'type': 'initial_data',
+                'data': results,
+                'election_type': 'Presidential',
+                'year': 2026
+            }))
+            print(f"📤 Sent initial data: {len(results)} results for Presidential 2026")
+        except Exception as e:
+            print(f"Error sending initial data: {e}")
+    
+    async def broadcast_vote_update(self, event):
+        """Broadcast vote update to all connected clients."""
+        await self.send(text_data=json.dumps({
+            'type': 'results_update',
+            'data': event['data']
+        }))
+    
+    @database_sync_to_async
+    def get_results(self, election_type, year, scope):
+        """Get accumulated results from database."""
+        queryset = AccumulatedResult.objects.filter(
+            election_type=election_type,
+            year=year,
+            scope=scope
+        ).select_related('candidate_registration__contender')
+        
+        serializer = WebSocketAccumulatedResultSerializer(queryset, many=True)
+        return serializer.data
+
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
@@ -93,7 +122,7 @@ class ElectionConsumer(AsyncWebsocketConsumer):
 
     async def handle_get_results(self, data):
         """Handle get_results request."""
-        election_type = data.get('election_type', 'Legislative')
+        election_type = data.get('election_type', 'Presidential')
         year = data.get('year', 2026)
         scope = data.get('scope', 'National')
         
@@ -126,8 +155,8 @@ class ElectionConsumer(AsyncWebsocketConsumer):
 
     async def handle_subscribe_to_election(self, data):
         """Handle subscription to a specific election."""
-        election_type = data.get('election_type', 'Legislative')
-        year = data.get('year', 2026)
+        election_type = data.get('election_type', 'Presidential')  # Changed default
+        year = data.get('year', 2026)  # Changed default
         
         self.election_type = election_type
         self.year = year
@@ -139,6 +168,7 @@ class ElectionConsumer(AsyncWebsocketConsumer):
             'year': year,
             'initial_data': results
         }))
+        print(f"📤 Subscription confirmed for {election_type} {year}")
 
     @database_sync_to_async
     def get_results(self, election_type, year, scope='National'):
@@ -149,6 +179,9 @@ class ElectionConsumer(AsyncWebsocketConsumer):
                 year=year,
                 scope=scope
             ).select_related('candidate_registration__contender')
+            
+            # Log what we found
+            print(f"📊 Found {queryset.count()} results for {election_type} {year} {scope}")
             
             serializer = WebSocketAccumulatedResultSerializer(queryset, many=True)
             return serializer.data
@@ -223,7 +256,7 @@ class ElectoralStaffConsumer(AsyncWebsocketConsumer):
             await self.accept()
             print(f"✅ Staff {user.username} connected to staff updates")
         else:
-            print(f"❌ Unauthorized staff connection attempt")
+            print("❌ Unauthorized staff connection attempt")
             await self.close()
 
     async def disconnect(self, close_code):
@@ -418,7 +451,7 @@ class ElectoralStaffConsumer(AsyncWebsocketConsumer):
     async def handle_get_pending_results(self, data):
         """Handle getting pending results."""
         try:
-            election_type = data.get('election_type', 'Legislative')
+            election_type = data.get('election_type', 'Presidential')
             year = data.get('year', 2026)
             
             pending = await self.get_pending_results_async(election_type, year)

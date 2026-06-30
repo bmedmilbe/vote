@@ -21,9 +21,10 @@ from .models import (
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ['username', 'email', 'first_name', 'last_name', 'is_staff', 'is_active', 'date_joined']
+    list_display = ['username', 'email', 'first_name', 'last_name', 'is_staff', 'is_active', 'date_joined', 'role']
     list_filter = ['is_staff', 'is_active', 'date_joined']
     search_fields = ['username', 'email', 'first_name', 'last_name']
+    list_editable = ['role']
     fieldsets = UserAdmin.fieldsets + (
         ('Additional Info', {'fields': ()}),
     )
@@ -151,6 +152,20 @@ class VoteCountInline(admin.TabularInline):
     raw_id_fields = ['candidate_registration', 'user']
 
 
+# Custom Constituency Filter
+class ConstituencyFilter(admin.SimpleListFilter):
+    title = 'Constituency'
+    parameter_name = 'constituency'
+    
+    def lookups(self, request, model_admin):
+        return [(c.id, f"{c.code} - {c.name}") for c in Constituency.objects.all().order_by('code')]
+    
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(polling_result__polling_station__constituency_id=self.value())
+        return queryset
+
+
 @admin.register(PollingStationResult)
 class PollingStationResultAdmin(admin.ModelAdmin):
     list_display = [
@@ -191,7 +206,7 @@ class VoteCountAdmin(admin.ModelAdmin):
         'polling_result__election_type', 
         'polling_result__year',
         'candidate_registration__contender',
-        'polling_result__polling_station__constituency'
+        ConstituencyFilter,  # Use the custom filter
     ]
     search_fields = [
         'polling_result__polling_station__name',

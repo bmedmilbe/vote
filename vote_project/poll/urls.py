@@ -1,30 +1,53 @@
 # poll/urls.py
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+
 from .views import (
     AccumulatedResultListView,
-    NationalResultsView,
-    DistrictResultsView,
+    CandidateRegistrationCreateView,
+    CandidateRegistrationDetailView,
+    CandidateRegistrationListView,
     CircleResultsView,
     ConstituencyResultsView,
-    PollingStationResultDetailView,
-    PollingStationResultCreateView,
-    PollingStationResultsByConstituencyView,
-    ElectionStatisticsView,
+    ContenderDetailView,
+    ContenderListView,
+    CurrentUserView,
     DashboardView,
-    debug_auth,
+    DistrictResultsView,
+    ElectionStatisticsView,
+    NationalResultsView,
+    PollingStationByUserView,
+    PollingStationDetailView,
+    PollingStationListView,
+    PollingStationResultCreateView,
+    PollingStationResultDetailView,
+    PollingStationResultsByConstituencyView,
+    SignInView,
     SignUpView,
-    SignInView
+    debug_auth,
 )
 
 app_name = 'poll'
 
 urlpatterns = [
     path('signup/', SignUpView.as_view(), name='sign-up'),
+    path('user/', CurrentUserView.as_view(), name='user-view'),
     # JWT Authentication
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/', SignInView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    # Candidates & Registrations
+    path('contenders/', ContenderListView.as_view(), name='contenders-list'),
+    path('contenders/<int:pk>/', ContenderDetailView.as_view(), name='contenders-detail'),
+    path('candidate-registrations/', CandidateRegistrationListView.as_view(), name='candidate-registrations-list'),
+    path('candidate-registrations/create/', CandidateRegistrationCreateView.as_view(), name='candidate-registrations-create'),
+    path('candidate-registrations/<int:pk>/', CandidateRegistrationDetailView.as_view(), name='candidate-registrations-detail'),
+
+    # Polling Stations
+    path('polling-stations/', PollingStationListView.as_view(), name='polling-stations-list'),
+    path('polling-stations/<int:pk>/', PollingStationDetailView.as_view(), name='polling-stations-detail'),
+    path('my-polling-stations/', PollingStationByUserView.as_view(), name='my-polling-stations'),
+    
     # Accumulated Results
     path('accumulated-results/', AccumulatedResultListView.as_view(), name='accumulated-results-list'),
     path('national-results/', NationalResultsView.as_view(), name='national-results'),
